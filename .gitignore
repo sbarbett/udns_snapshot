@@ -3,7 +3,10 @@
 
 # Exclude zones directories
 .idea/**
+/venv/**
 
 # Exclude some file types
 *.sublime-project
 *.sublime-workspace
+*.zip
+*.log

@@ -53,7 +53,7 @@ This script provides a basic CLI for taking snapshots of all zones within an Ult
    - Actions:
      - `-s` or `--restore`: Restore zones to their most recent snapshot.
      - `-l` or `--log-file`: Specify the log file name (default is `output.log`).
-     - `-d` or `--debug`: Enable debug mode.
+     - `-d` or `--download`: Download a zip file with all existing snapshots.
      - `-z` or `--zones-file`: Specify a file with a list of zones to process.
 
 ## Notes

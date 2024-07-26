@@ -5,6 +5,10 @@ import argparse
 from tqdm import tqdm
 import ultra_auth
 import logging
+import json
+import zipfile
+import os
+import time
 
 REPO_URL = "https://github.com/sbarbett/udns_snapshot"
 
@@ -47,6 +51,18 @@ def prompt_confirmation(action_description):
         print(f"{RED}Operation terminated.{RESET}")
         exit(0)
 
+def get_snapshot(client, zone):
+    logging.info(f"[DOWNLOAD] Creating backup of {zone}.")
+    try:
+        response = client.get(f"/v1/zones/{zone}/snapshot")
+        logging.info(f"[SUCCESS] Snapshot downloaded for {zone}.")
+        return response
+    except HTTPError as e:
+        if e.response.status_code in [400, 404]:
+            logging.error(f"[SKIP] Unable to download {zone} snapshot. Either this zone cannot be snapshotted (secondary/alias), a snapshot doesn't exist or you don't have permission. HTTP Error: {e.response.status_code}")
+        else:
+            logging.error(f"[FATAL] An unexpected error occurred trying to download {zone}.")
+
 def create_snapshot(client, zone):
     logging.info(f"[CREATE] Beginning snapshot of {zone}.")
     try:
@@ -72,7 +88,7 @@ def restore_snapshot(client, zone):
         if e.response.status_code in [400, 404]:
             logging.error(f"[SKIP] Unable to restore {zone}. Either this zone cannot be restored (secondary/alias), you don't have permission or no snapshot exists. HTTP Error: {e.response.status_code}")
         else:
-            logging.error(f"[FATAL] An unexpected error occurred trying to snapshot {zone}.")
+            logging.error(f"[FATAL] An unexpected error occurred trying to restore {zone}.")
             raise
 
 def verify_task(client, task):
@@ -90,8 +106,39 @@ def verify_task(client, task):
         logging.error(f"[FATAL] An unexpected error occurred retrieving {task}: {e.message}")
         raise
 
-def main(username=None, password=None, token=None, refresh_token=None, restore=False, log_file='output.log', debug=False, zones_file=None):
-    logging.basicConfig(filename=log_file, level=logging.DEBUG if debug else logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+def backup_zones_to_zip(zones):
+    timestamp = int(time.time())
+    zip_filename = f'snapshot-backup_{timestamp}.zip'
+    
+    # Temporary directory to store the json files
+    temp_dir = 'temp_zone_files'
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    # Create JSON files
+    for zone in zones:
+        file_name = f"{zone['zoneName']}.json"
+        file_path = os.path.join(temp_dir, file_name)
+        with open(file_path, 'w') as file:
+            logging.info(f"[DOWNLOAD] Writing '{file_name}'' to '{file_path}''.")
+            json.dump(zone, file, indent=4)
+    
+    # Create a zip file and add all JSON files
+    with zipfile.ZipFile(zip_filename, 'w') as zipf:
+        logging.info(f"[DOWNLOAD] Creating archive '{zip_filename}'.")
+        for file_name in os.listdir(temp_dir):
+            file_path = os.path.join(temp_dir, file_name)
+            zipf.write(file_path, arcname=file_name)
+    
+    # Clean up the temporary files
+    logging.info("[DOWNLOAD] Cleaning up temp files.")
+    for file_name in os.listdir(temp_dir):
+        os.remove(os.path.join(temp_dir, file_name))
+    os.rmdir(temp_dir)
+    
+    return zip_filename
+
+def main(username=None, password=None, token=None, refresh_token=None, restore=False, log_file='output.log', download=False, zones_file=None):
+    logging.basicConfig(filename=log_file, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     if token:
         client = ultra_auth.UltraApi(token, refresh_token, True)
@@ -104,7 +151,19 @@ def main(username=None, password=None, token=None, refresh_token=None, restore=F
         zones = get_zones(client)
         zone_names = [z['properties']['name'] for z in zones]
 
-    if restore:
+    if download:
+        zone_snapshots = []
+        for zone in tqdm(zone_names, desc="Downloading and zipping snapshot backups"):
+            zone_snapshot = get_snapshot(client, zone)
+            if zone_snapshot:
+                zone_snapshots.append(zone_snapshot)
+
+        if zone_snapshots:
+            backup_zones_to_zip(zone_snapshots)
+        else:
+            logging.info("[SKIP] No existing snapshots found.")
+
+    elif restore:
         prompt_confirmation("roll zones back to their most recent snapshot")
         for zone in tqdm(zone_names, desc="Restoring zones to their most recent snapshot"):
             task = restore_snapshot(client, zone)
@@ -131,7 +190,7 @@ if __name__ == "__main__":
     
     parser.add_argument("-s", "--restore", action="store_true", help="Loops through zones and restores them to their most recent snapshot.")
     parser.add_argument("-l", "--log-file", default="output.log", help="Specify the log file name. Default is 'output.log'.")
-    parser.add_argument("-d", "--debug", action="store_true", help="Enabled the auth client's debug mode.")
+    parser.add_argument("-d", "--download", action="store_true", help="Download a zip file with all existing snapshots in an account or specified list.")
     parser.add_argument("-z", "--zones-file", help="Specify a file containing a list of zones (one per line). If not specified, all zones will be processed.")
 
     args = parser.parse_args()
@@ -146,4 +205,4 @@ if __name__ == "__main__":
     else:
         parser.error("You must provide either a token, or both a username and password.")
 
-    main(args.username, args.password, args.token, args.refresh_token, args.restore, args.log_file, args.debug, args.zones_file)
+    main(args.username, args.password, args.token, args.refresh_token, args.restore, args.log_file, args.download, args.zones_file)
