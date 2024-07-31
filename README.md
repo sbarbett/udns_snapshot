@@ -55,6 +55,7 @@ This script provides a basic CLI for taking snapshots of all zones within an Ult
      - `-l` or `--log-file`: Specify the log file name (default is `output.log`).
      - `-d` or `--download`: Download a zip file with all existing snapshots.
      - `-z` or `--zones-file`: Specify a file with a list of zones to process.
+     - `-a` or `--all-zones`: Process every zone in an account (use with caution).
 
 ## Notes
 
