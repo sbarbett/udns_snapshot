@@ -4,6 +4,7 @@
 # Exclude zones directories
 .idea/**
 /venv/**
+**/__pycache_/**
 
 # Exclude some file types
 *.sublime-project
