@@ -205,7 +205,8 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--restore", action="store_true", help="Loops through zones and restores them to their most recent snapshot.")
     parser.add_argument("-l", "--log-file", default="output.log", help="Specify the log file name. Default is 'output.log'.")
     parser.add_argument("-d", "--download", action="store_true", help="Download a zip file with all existing snapshots in an account or specified list.")
-    parser.add_argument("-z", "--zones-file", help="Specify a file containing a list of zones (one per line). If not specified, all zones will be processed.")
+    parser.add_argument("-z", "--zones-file", help="Specify a file containing a list of zones (one per line).")
+    parser.add_argument("-a", "--all-zones", action="store_true", help="Iterate through every zone in a given account.")
 
     args = parser.parse_args()
 
@@ -218,5 +219,8 @@ if __name__ == "__main__":
         parser.error("You must provide both a username and password.")
     else:
         parser.error("You must provide either a token, or both a username and password.")
+
+    if not (args.zones_file or args.all_zones):
+        parser.error("You either need to specify a file containing a list of zones or use the --all-zones switch.")
 
     main(args.username, args.password, args.token, args.refresh_token, args.restore, args.log_file, args.download, args.zones_file)
