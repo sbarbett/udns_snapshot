@@ -3,6 +3,8 @@
 from requests import HTTPError
 import argparse
 from tqdm import tqdm
+from tasks import TaskHandler
+#from ultra_rest_client.connection import RestApiConnection
 import ultra_auth
 import logging
 import json
@@ -10,7 +12,7 @@ import zipfile
 import os
 import time
 
-REPO_URL = "https://github.com/sbarbett/udns_snapshot"
+REPO_URL = "https://github.com/vercara/udns_snapshot"
 
 class CustomHelpParser(argparse.ArgumentParser):
     def print_help(self, *args, **kwargs):
@@ -93,7 +95,7 @@ def restore_snapshot(client, zone):
 
 def verify_task(client, task):
     logging.info(f"[VERIFY] Checking status of {task}.")
-    handler = ultra_auth.TaskHandler(client)
+    handler = TaskHandler(client)
     try:
         response = handler.wait(task, 1)
         rcode = response["code"]
@@ -116,11 +118,15 @@ def backup_zones_to_zip(zones):
     
     # Create JSON files
     for zone in zones:
-        file_name = f"{zone['zoneName']}.json"
-        file_path = os.path.join(temp_dir, file_name)
-        with open(file_path, 'w') as file:
-            logging.info(f"[DOWNLOAD] Writing '{file_name}'' to '{file_path}''.")
-            json.dump(zone, file, indent=4)
+        try:
+            file_name = f"{zone['zone_snapshot']['zoneName']}.json"
+            file_path = os.path.join(temp_dir, file_name)
+            with open(file_path, 'w') as file:
+                logging.info(f"[DOWNLOAD] Writing '{file_name}'' to '{file_path}''.")
+                json.dump(zone, file, indent=4)
+        except:
+            logging.info(f"[SKIP] Skipping {zone['zone_name']}, reason: {json.dumps(zone['zone_snapshot'])}")
+
     
     # Create a zip file and add all JSON files
     with zipfile.ZipFile(zip_filename, 'w') as zipf:
@@ -140,6 +146,14 @@ def backup_zones_to_zip(zones):
 def main(username=None, password=None, token=None, refresh_token=None, restore=False, log_file='output.log', download=False, zones_file=None):
     logging.basicConfig(filename=log_file, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+    # We will be migrating to github.com/ultradns/python_rest_api_client soon
+    # client = RestApiConnection(host='api.ultradns.com')
+    # if token:
+    #     client.access_token = token
+    #     client.refresh_token = refresh_token
+    # else:
+    #     client.auth(username, password)
+
     if token:
         client = ultra_auth.UltraApi(token, refresh_token, True)
     else:
@@ -156,12 +170,12 @@ def main(username=None, password=None, token=None, refresh_token=None, restore=F
         for zone in tqdm(zone_names, desc="Downloading and zipping snapshot backups"):
             zone_snapshot = get_snapshot(client, zone)
             if zone_snapshot:
-                zone_snapshots.append(zone_snapshot)
+                zone_snapshots.append({'zone_snapshot': zone_snapshot, 'zone_name': zone})
 
         if zone_snapshots:
             backup_zones_to_zip(zone_snapshots)
         else:
-            logging.info("[SKIP] No existing snapshots found.")
+            logging.info(f"[SKIP] No existing snapshots found for {zone}.")
 
     elif restore:
         prompt_confirmation("roll zones back to their most recent snapshot")
