@@ -123,7 +123,7 @@ def backup_zones_to_zip(zones):
             file_path = os.path.join(temp_dir, file_name)
             with open(file_path, 'w') as file:
                 logging.info(f"[DOWNLOAD] Writing '{file_name}'' to '{file_path}''.")
-                json.dump(zone, file, indent=4)
+                json.dump(zone['zone_snapshot'], file, indent=4)
         except:
             logging.info(f"[SKIP] Skipping {zone['zone_name']}, reason: {json.dumps(zone['zone_snapshot'])}")
 
